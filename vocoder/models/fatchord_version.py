@@ -118,8 +118,8 @@ class WaveRNN(nn.Module):
     def forward(self, x, mels):
         self.step += 1
         bsize = x.size(0)
-        h1 = torch.zeros(1, bsize, self.rnn_dims).cuda()
-        h2 = torch.zeros(1, bsize, self.rnn_dims).cuda()
+        h1 = torch.zeros(1, bsize, self.rnn_dims).cpu()
+        h2 = torch.zeros(1, bsize, self.rnn_dims).cpu()
         mels, aux = self.upsample(mels)
 
         aux_idx = [self.aux_dims * i for i in range(5)]
@@ -157,7 +157,7 @@ class WaveRNN(nn.Module):
         rnn2 = self.get_gru_cell(self.rnn2)
 
         with torch.no_grad():
-            mels = mels.cuda()
+            mels = mels.cpu()
             wave_len = (mels.size(-1) - 1) * self.hop_length
             mels = self.pad_tensor(mels.transpose(1, 2), pad=self.pad, side='both')
             mels, aux = self.upsample(mels.transpose(1, 2))
@@ -168,9 +168,9 @@ class WaveRNN(nn.Module):
 
             b_size, seq_len, _ = mels.size()
 
-            h1 = torch.zeros(b_size, self.rnn_dims).cuda()
-            h2 = torch.zeros(b_size, self.rnn_dims).cuda()
-            x = torch.zeros(b_size, 1).cuda()
+            h1 = torch.zeros(b_size, self.rnn_dims).cpu()
+            h2 = torch.zeros(b_size, self.rnn_dims).cpu()
+            x = torch.zeros(b_size, 1).cpu()
 
             d = self.aux_dims
             aux_split = [aux[:, :, d * i:d * (i + 1)] for i in range(4)]
@@ -202,7 +202,7 @@ class WaveRNN(nn.Module):
                     sample = sample_from_discretized_mix_logistic(logits.unsqueeze(0).transpose(1, 2))
                     output.append(sample.view(-1))
                     # x = torch.FloatTensor([[sample]]).cuda()
-                    x = sample.transpose(0, 1).cuda()
+                    x = sample.transpose(0, 1).cpu()
 
                 elif self.mode == 'RAW' :
                     posterior = F.softmax(logits, dim=1)
@@ -221,7 +221,7 @@ class WaveRNN(nn.Module):
         output = torch.stack(output).transpose(0, 1)
         output = output.cpu().numpy()
         output = output.astype(np.float64)
-        
+
         if batched:
             output = self.xfade_and_unfold(output, target, overlap)
         else:
@@ -236,7 +236,7 @@ class WaveRNN(nn.Module):
         fade_out = np.linspace(1, 0, 20 * self.hop_length)
         output = output[:wave_len]
         output[-20 * self.hop_length:] *= fade_out
-        
+
         self.train()
 
         return output
@@ -260,7 +260,7 @@ class WaveRNN(nn.Module):
         # i.e., it won't generalise to other shapes/dims
         b, t, c = x.size()
         total = t + 2 * pad if side == 'both' else t + pad
-        padded = torch.zeros(b, total, c).cuda()
+        padded = torch.zeros(b, total, c).cpu()
         if side == 'before' or side == 'both':
             padded[:, pad:pad + t, :] = x
         elif side == 'after':
@@ -306,7 +306,7 @@ class WaveRNN(nn.Module):
             padding = target + 2 * overlap - remaining
             x = self.pad_tensor(x, padding, side='after')
 
-        folded = torch.zeros(num_folds, target + 2 * overlap, features).cuda()
+        folded = torch.zeros(num_folds, target + 2 * overlap, features).cpu()
 
         # Get the values for the folded tensor
         for i in range(num_folds):
@@ -392,7 +392,7 @@ class WaveRNN(nn.Module):
             print(msg, file=f)
 
     def load(self, path, optimizer) :
-        checkpoint = torch.load(path)
+        checkpoint = torch.load(path, map_location=torch.device('cpu'))
         if "optimizer_state" in checkpoint:
             self.load_state_dict(checkpoint["model_state"])
             optimizer.load_state_dict(checkpoint["optimizer_state"])
